@@ -524,9 +524,48 @@ class Board:
             'promoted_to': None,
         }
 
-        # 王车易位
+        # 王车易位 - 添加防御性二次校验
         if ptype == 'K' and abs(tf - sf) == 2:
             rank = sr
+            enemy = 'b' if color == 'w' else 'w'
+            # 防御性校验：检查易位合法性
+            if tf > sf:  # 短易位
+                right_key = 'K' if color == 'w' else 'k'
+                # 1. 检查易位权利
+                if not self.castling.get(right_key, False):
+                    return None
+                # 2. 检查路径占用 (f1/f8, g1/g8)
+                if self.board[5][rank] != '' or self.board[6][rank] != '':
+                    return None
+                # 3. 检查王是否被将军
+                if self.in_check(color):
+                    return None
+                # 4. 检查经过格和到达格是否受攻击
+                if self.is_square_attacked(5, rank, enemy) or self.is_square_attacked(6, rank, enemy):
+                    return None
+                # 5. 检查车位置是否正确
+                rook_piece = 'R' if color == 'w' else 'r'
+                if self.board[7][rank] != rook_piece:
+                    return None
+            else:  # 长易位
+                right_key = 'Q' if color == 'w' else 'q'
+                # 1. 检查易位权利
+                if not self.castling.get(right_key, False):
+                    return None
+                # 2. 检查路径占用 (d1/d8, c1/c8, b1/b8)
+                if self.board[1][rank] != '' or self.board[2][rank] != '' or self.board[3][rank] != '':
+                    return None
+                # 3. 检查王是否被将军
+                if self.in_check(color):
+                    return None
+                # 4. 检查经过格和到达格是否受攻击
+                if self.is_square_attacked(2, rank, enemy) or self.is_square_attacked(3, rank, enemy):
+                    return None
+                # 5. 检查车位置是否正确
+                rook_piece = 'R' if color == 'w' else 'r'
+                if self.board[0][rank] != rook_piece:
+                    return None
+            # 校验通过，执行易位
             if tf > sf:  # 短易位
                 move_info['is_castle_k'] = True
                 self.board[tf][tr] = piece
@@ -660,13 +699,27 @@ def parse_san(board, san):
     original_san = san
     # 移除将军/将死标记
     san = san.rstrip('+#')
-    # 检查王车易位
+    # 检查王车易位 - 走统一的合法走法判断
     if san in ('O-O', '0-0'):
         rank = 0 if board.turn == 'w' else 7
-        return (4, rank, 6, rank, None)
+        king_from = (4, rank)
+        king_to = (6, rank)
+        # 获取王的合法走法，验证易位是否合法
+        legal_moves = board.get_legal_moves(king_from[0], king_from[1])
+        for move in legal_moves:
+            if move[2] == king_to[0] and move[3] == king_to[1]:
+                return (king_from[0], king_from[1], king_to[0], king_to[1], None)
+        return None
     if san in ('O-O-O', '0-0-0'):
         rank = 0 if board.turn == 'w' else 7
-        return (4, rank, 2, rank, None)
+        king_from = (4, rank)
+        king_to = (2, rank)
+        # 获取王的合法走法，验证易位是否合法
+        legal_moves = board.get_legal_moves(king_from[0], king_from[1])
+        for move in legal_moves:
+            if move[2] == king_to[0] and move[3] == king_to[1]:
+                return (king_from[0], king_from[1], king_to[0], king_to[1], None)
+        return None
 
     promotion = None
     # 检查升变
@@ -896,7 +949,10 @@ class GameReplayer:
     def __init__(self, game, start_fen=None):
         self.game = game
         self.start_fen = start_fen
-        self.board = Board(start_fen) if start_fen else Board()
+        # 如果没有指定start_fen，检查游戏标签中的FEN
+        if self.start_fen is None and 'FEN' in game.get('tags', {}):
+            self.start_fen = game['tags']['FEN']
+        self.board = Board(self.start_fen) if self.start_fen else Board()
         self.board_states = [self.board.to_fen()]
         self.move_results = []
         self.errors = []
@@ -988,8 +1044,14 @@ def cmd_validate(args):
     if not games:
         print("未找到对局")
         return 0
+    # 如果指定了game参数，只验证指定对局
+    game_indices = range(len(games))
+    if args.game is not None:
+        game_idx = max(0, min(args.game - 1, len(games) - 1))
+        game_indices = [game_idx]
     total_errors = 0
-    for i, game in enumerate(games):
+    for i in game_indices:
+        game = games[i]
         tags = game['tags']
         white = tags.get('White', '?')
         black = tags.get('Black', '?')
@@ -1160,7 +1222,13 @@ def cmd_timeline(args):
         print("未找到对局")
         return 0
     output_lines = []
-    for i, game in enumerate(games):
+    # 如果指定了game参数，只处理指定对局
+    game_indices = range(len(games))
+    if args.game is not None:
+        game_idx = max(0, min(args.game - 1, len(games) - 1))
+        game_indices = [game_idx]
+    for i in game_indices:
+        game = games[i]
         tags = game['tags']
         white = tags.get('White', '?')
         black = tags.get('Black', '?')
@@ -1338,6 +1406,7 @@ def build_parser():
     # validate
     p_validate = subparsers.add_parser('validate', help='验证走法合法性')
     p_validate.add_argument('file', help='PGN文件路径')
+    p_validate.add_argument('--game', type=int, default=None, help='指定对局编号(从1开始，不指定则验证所有对局)')
     p_validate.add_argument('--fen', default=None, help='起始FEN位置')
     p_validate.set_defaults(func=cmd_validate)
 
@@ -1364,6 +1433,7 @@ def build_parser():
     # timeline
     p_tl = subparsers.add_parser('timeline', help='生成Markdown时间线')
     p_tl.add_argument('file', help='PGN文件路径')
+    p_tl.add_argument('--game', type=int, default=None, help='指定对局编号(从1开始，不指定则导出所有对局)')
     p_tl.add_argument('--output', '-o', help='输出Markdown文件')
     p_tl.set_defaults(func=cmd_timeline)
 

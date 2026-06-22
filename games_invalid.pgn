@@ -11,7 +11,7 @@
 2. Nf3 Nc6
 3. Bb5 a6
 4. Ba4 Nf6
-5. O-O d7 {非法：兵不能前进1格后仍在原位附近 - 实际是合法的}
+5. O-O d7 {非法：黑方d7兵走d7，原地未动}
 6. Re1 b5
 7. Bb3 Be7
 8. c3 O-O
@@ -46,3 +46,103 @@
 Qf6 9. e5 Qg6 10. Re1 Nge7 11. Ba3 b5 12. Qxb5 Rb8 13. Qa4 Bb6 14. Nbd2 Bb7 15.
 Ne4 Qf5 16. Bxd3 Qh5 17. Nf6+ gxf6 18. exf6 Rg8 19. Rad1 Qxf3 20. Rxe7+ Nxe7 21.
 Qxd7+ Kxd7 22. Bf5+ Ke8 23. Bd7+ Kf8 24. Bxe7# 1-0
+
+[Event "非法易位测试1 - 开局第一步直接短易位(路径被马阻挡)"]
+[Site "测试环境"]
+[Date "2024.01.03"]
+[Round "3"]
+[White "易位测试白1"]
+[Black "易位测试黑1"]
+[Result "*"]
+[Test "CastleBlocked"]
+
+1. O-O {非法：f1和g1格被己方马和象阻挡，且王和车之间有棋子} e5 *
+
+[Event "非法易位测试2 - 王已移动过(失去易位权利)"]
+[Site "测试环境"]
+[Date "2024.01.06"]
+[Round "6"]
+[White "易位测试白4"]
+[Black "易位测试黑4"]
+[Result "*"]
+[Test "CastleKingMoved"]
+
+1. e4 e5 2. Nf3 Nc6 3. Bc4 Bc5 4. Ke2 {王移动，失去易位权利} Nf6 5. Kf1 {王移回原位但权利已失} d6
+6. O-O {非法：王已移动过，不能易位} *
+
+[Event "非法易位测试3 - h1车已移动过(失去短易位权利)"]
+[Site "测试环境"]
+[Date "2024.01.07"]
+[Round "7"]
+[White "易位测试白5"]
+[Black "易位测试黑5"]
+[Result "*"]
+[Test "CastleRookMoved"]
+
+1. e4 e5 2. Nf3 Nc6 3. Bc4 Bc5 4. Rg1 {h1车移动到g1，失去短易位权利} Nf6 5. Rh1 {车移回原位但权利已失} d6
+6. O-O {非法：h1车已移动过，不能短易位} *
+
+[Event "非法易位测试4 - 长易位路径被马阻挡"]
+[Site "测试环境"]
+[Date "2024.01.08"]
+[Round "8"]
+[White "易位测试白6"]
+[Black "易位测试黑6"]
+[Result "*"]
+[Test "CastleLongBlocked"]
+
+1. e4 e5 2. Nc3 Nf6 3. d4 d5 4. Bf4 Bf5 5. e5 Nfd7 6. Qd2 c5 7. O-O-O {非法：b1格有马，c1和d1格被马和后阻挡} *
+
+[Event "非法易位测试5 - 王被将军时尝试易位(用FEN测试)"]
+[Site "测试环境"]
+[Date "2024.01.04"]
+[Round "4"]
+[White "易位测试白2"]
+[Black "易位测试黑2"]
+[Result "*"]
+[FEN "r1bqk1nr/pppp1ppp/8/4p3/8/2b2N2/PPP2PPP/RNBQK2R w KQkq - 0 6"]
+[Test "CastleInCheck"]
+
+{说明：此局面白王在e1被c3黑象将军(c3-d2-e1，d2已空)，用命令 python3 pgnlab.py validate games_invalid.pgn --game 7 测试}
+
+1. O-O {非法：白王被将军，不能易位} *
+
+[Event "非法易位测试6 - 经过格f1受攻击时短易位(用FEN测试)"]
+[Site "测试环境"]
+[Date "2024.01.05"]
+[Round "5"]
+[White "易位测试白3"]
+[Black "易位测试黑3"]
+[Result "*"]
+[FEN "r1bqk2r/pppp1ppp/8/4p3/2b5/5N2/PPPP1PPP/RNBQK2R w KQkq - 0 6"]
+[Test "CastleAttackedSquare"]
+
+{说明：f1格被c4黑象攻击，白方经过f1时会受攻击，用命令 python3 pgnlab.py validate games_invalid.pgn --fen "r1bqk2r/pppp1ppp/8/4p3/2b5/5N2/PPPP1PPP/RNBQK2R w KQkq - 0 6" --game 8 测试}
+
+1. O-O {非法：经过格f1受攻击} *
+
+[Event "合法易位对照 - 正常短易位"]
+[Site "测试环境"]
+[Date "2024.01.09"]
+[Round "9"]
+[White "合法易位白"]
+[Black "合法易位黑"]
+[Result "1-0"]
+[Test "CastleValid"]
+
+1. e4 e5 2. Nf3 Nc6 3. Bc4 Bc5 4. c3 Nf6 5. d4 exd4 6. cxd4 Bb4+ 7. Nc3 Nxe4
+8. O-O {合法短易位，王和车都未移动，路径清空，无将军，经过格不受攻击} Bxc3 9. d5 Bf6 10. Re1 Ne7 11. Rxe4 d6 12. Bg5 Bxg5
+13. Nxg5 h6 14. Qf3 hxg5 15. Qxf7+ Kd7 16. Qxg7 1-0
+
+[Event "合法易位对照 - 正常长易位"]
+[Site "测试环境"]
+[Date "2024.01.10"]
+[Round "10"]
+[White "合法长易位白"]
+[Black "合法长易位黑"]
+[Result "0-1"]
+[Test "CastleLongValid"]
+
+1. e4 e6 2. d4 d5 3. Nc3 Nf6 4. Bg5 Be7 5. e5 Nfd7 6. Bxe7 Qxe7 7. f4 c5 8. Nf3 Nc6
+9. dxc5 Qxc5 10. Qd2 O-O 11. O-O-O {合法长易位，路径清空，无将军，经过格不受攻击} Nb6
+12. Kb1 Bd7 13. h3 Rfc8 14. Bd3 h6 0-1
