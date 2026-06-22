@@ -1042,73 +1042,72 @@ def _find_pieces(board, color, ptype=None):
     return pieces
 
 
+def _get_piece_attacks(board, f, r):
+    """获取某个格子上的棋子攻击的格子"""
+    p = board.board[f][r]
+    if not p:
+        return set()
+    color = Piece.color(p)
+    ptype = Piece.type(p)
+    attacked = set()
+    if ptype == 'P':
+        direction = 1 if color == 'w' else -1
+        for df in [-1, 1]:
+            nf, nr = f + df, r + direction
+            if 0 <= nf < 8 and 0 <= nr < 8:
+                attacked.add((nf, nr))
+    elif ptype == 'N':
+        knight_moves = [(1, 2), (2, 1), (-1, 2), (-2, 1), (1, -2), (2, -1), (-1, -2), (-2, -1)]
+        for df, dr in knight_moves:
+            nf, nr = f + df, r + dr
+            if 0 <= nf < 8 and 0 <= nr < 8:
+                attacked.add((nf, nr))
+    elif ptype in ('B', 'R', 'Q'):
+        dirs = []
+        if ptype in ('R', 'Q'):
+            dirs.extend([(0, -1), (0, 1), (-1, 0), (1, 0)])
+        if ptype in ('B', 'Q'):
+            dirs.extend([(-1, -1), (-1, 1), (1, -1), (1, 1)])
+        for df, dr in dirs:
+            nf, nr = f + df, r + dr
+            while 0 <= nf < 8 and 0 <= nr < 8:
+                attacked.add((nf, nr))
+                if board.board[nf][nr] != '':
+                    break
+                nf += df
+                nr += dr
+    elif ptype == 'K':
+        for df in [-1, 0, 1]:
+            for dr in [-1, 0, 1]:
+                if df == 0 and dr == 0:
+                    continue
+                nf, nr = f + df, r + dr
+                if 0 <= nf < 8 and 0 <= nr < 8:
+                    attacked.add((nf, nr))
+    return attacked
+
+
 def _get_squares_attacked_by(board, color):
     """获取color方攻击的所有格子"""
     attacked = set()
     for f, r, p in _find_pieces(board, color):
-        ptype = Piece.type(p)
-        if ptype == 'P':
-            direction = 1 if color == 'w' else -1
-            for df in [-1, 1]:
-                nf, nr = f + df, r + direction
-                if 0 <= nf < 8 and 0 <= nr < 8:
-                    attacked.add((nf, nr))
-        elif ptype == 'N':
-            knight_moves = [(1, 2), (2, 1), (-1, 2), (-2, 1), (1, -2), (2, -1), (-1, -2), (-2, -1)]
-            for df, dr in knight_moves:
-                nf, nr = f + df, r + dr
-                if 0 <= nf < 8 and 0 <= nr < 8:
-                    attacked.add((nf, nr))
-        elif ptype == 'B' or ptype == 'Q':
-            for df, dr in [(-1, -1), (-1, 1), (1, -1), (1, 1)]:
-                nf, nr = f + df, r + dr
-                while 0 <= nf < 8 and 0 <= nr < 8:
-                    attacked.add((nf, nr))
-                    if board.board[nf][nr] != '':
-                        break
-                    nf += df
-                    nr += dr
-        if ptype == 'R' or ptype == 'Q':
-            for df, dr in [(0, -1), (0, 1), (-1, 0), (1, 0)]:
-                nf, nr = f + df, r + dr
-                while 0 <= nf < 8 and 0 <= nr < 8:
-                    attacked.add((nf, nr))
-                    if board.board[nf][nr] != '':
-                        break
-                    nf += df
-                    nr += dr
-        elif ptype == 'K':
-            for df in [-1, 0, 1]:
-                for dr in [-1, 0, 1]:
-                    if df == 0 and dr == 0:
-                        continue
-                    nf, nr = f + df, r + dr
-                    if 0 <= nf < 8 and 0 <= nr < 8:
-                        attacked.add((nf, nr))
+        attacked |= _get_piece_attacks(board, f, r)
     return attacked
 
 
-def _line_squares(sf, sr, tf, tr):
-    """获取两点之间的直线或斜线上的格子(不含起点，含终点)"""
-    df = tf - sf
-    dr = tr - sr
-    if df == 0 and dr == 0:
-        return []
-    if df != 0 and dr != 0 and abs(df) != abs(dr):
-        return []
-    step_f = 0 if df == 0 else (1 if df > 0 else -1)
-    step_r = 0 if dr == 0 else (1 if dr > 0 else -1)
-    squares = []
-    nf, nr = sf + step_f, sr + step_r
-    while (nf, nr) != (tf, tr):
-        if not (0 <= nf < 8 and 0 <= nr < 8):
-            break
-        squares.append((nf, nr))
-        nf += step_f
-        nr += step_r
-    if 0 <= tf < 8 and 0 <= tr < 8:
-        squares.append((tf, tr))
-    return squares
+def _is_square_defended(board, f, r, by_color):
+    """检查某个格子是否被指定颜色的棋子防守"""
+    return board.is_square_attacked(f, r, by_color)
+
+
+def _count_defenders(board, f, r, by_color):
+    """计算某个格子有多少个防守子"""
+    count = 0
+    for pf, pr, pp in _find_pieces(board, by_color):
+        attacks = _get_piece_attacks(board, pf, pr)
+        if (f, r) in attacks:
+            count += 1
+    return count
 
 
 def detect_double_check(board_before, board_after, move_info):
@@ -1135,29 +1134,52 @@ def detect_double_check(board_before, board_after, move_info):
 
 
 def detect_fork(board_before, board_after, move_info):
-    """检测叉击：一个棋子同时攻击对方两个或更多高价值棋子"""
+    """检测叉击：一个棋子同时攻击对方两个或更多高价值棋子，且能获得子力优势"""
     mover = move_info['piece']
     mover_color = Piece.color(mover)
     target_color = 'b' if mover_color == 'w' else 'w'
     tf = ord(move_info['to'][0]) - ord('a')
     tr = int(move_info['to'][1]) - 1
     legal_moves_from_target = board_after.get_legal_moves(tf, tr)
-    high_value_targets = []
+    targets = []
     for move in legal_moves_from_target:
         ttf, ttr = move[2], move[3]
         target_piece = board_after.board[ttf][ttr]
         if target_piece and Piece.color(target_piece) == target_color:
-            pv = _piece_value(target_piece)
-            if pv >= 3:
-                high_value_targets.append((idx_to_sq(ttf, ttr), target_piece))
-    if len(high_value_targets) >= 2:
-        targets_desc = ', '.join([f"{p}@{sq}" for sq, p in high_value_targets])
-        return 'fork', f"{mover.upper()} 同时攻击 {len(high_value_targets)} 个目标: {targets_desc}"
+            defended = _is_square_defended(board_after, ttf, ttr, target_color)
+            targets.append({
+                'sq': idx_to_sq(ttf, ttr),
+                'piece': target_piece,
+                'value': _piece_value(target_piece),
+                'defended': defended,
+            })
+    if len(targets) < 2:
+        return None, ''
+    high_value_undefended = [t for t in targets if not t['defended'] and t['value'] >= 3]
+    has_royal = any(t['value'] >= 5 for t in targets)
+    mover_val = _piece_value(mover)
+    max_target_val = max(t['value'] for t in targets)
+    meaningful_fork = False
+    reason = ''
+    if len(high_value_undefended) >= 2:
+        meaningful_fork = True
+        reason = f"同时攻击 {len(high_value_undefended)} 个未防守的高价值目标"
+    elif has_royal and len([t for t in targets if t['value'] >= 3]) >= 2:
+        meaningful_fork = True
+        reason = f"攻击王/后等重子，同时威胁其他棋子"
+    elif max_target_val > mover_val and len(targets) >= 2:
+        undefended_high = [t for t in targets if not t['defended'] and t['value'] > mover_val]
+        if len(undefended_high) >= 1 and len(targets) >= 2:
+            meaningful_fork = True
+            reason = f"叉击目标价值高于攻击子，可获子力优势"
+    if meaningful_fork:
+        targets_desc = ', '.join([f"{t['piece'].upper()}@{t['sq']}" for t in targets[:3]])
+        return 'fork', f"{mover.upper()}@{idx_to_sq(tf, tr)} {reason}: {targets_desc}"
     return None, ''
 
 
 def detect_pin(board_before, board_after, move_info):
-    """检测牵制：走子后，对方某个棋子被攻击，移动它会暴露后面更高价值的棋子(通常是王)"""
+    """检测牵制：远射程棋子攻击，前方棋子移动会暴露后方更高价值棋子(通常是王)"""
     attacker_color = Piece.color(move_info['piece'])
     defender_color = 'b' if attacker_color == 'w' else 'w'
     af = ord(move_info['to'][0]) - ord('a')
@@ -1175,11 +1197,13 @@ def detect_pin(board_before, board_after, move_info):
         directions.extend([(0, -1), (0, 1), (-1, 0), (1, 0)])
     if attacker_ptype in ('B', 'Q'):
         directions.extend([(-1, -1), (-1, 1), (1, -1), (1, 1)])
+    best_pin = None
     for df, dr in directions:
         nf, nr = af + df, ar + dr
         first_piece = None
         first_sq = None
-        hit_king = False
+        second_piece = None
+        second_sq = None
         while 0 <= nf < 8 and 0 <= nr < 8:
             p = board_after.board[nf][nr]
             if p != '':
@@ -1188,35 +1212,36 @@ def detect_pin(board_before, board_after, move_info):
                         first_piece = p
                         first_sq = (nf, nr)
                     else:
-                        if Piece.type(p) == 'K' and (nf, nr) == (kf, kr):
-                            hit_king = True
+                        second_piece = p
+                        second_sq = (nf, nr)
                         break
                 else:
                     break
             nf += df
             nr += dr
-        if hit_king and first_piece is not None and first_sq is not None:
-            pinned_sq = idx_to_sq(first_sq[0], first_sq[1])
-            return 'pin', f"{first_piece.upper()}@{pinned_sq} 被 {mover.upper()} 牵制，移动会暴露王"
-        if first_piece is not None and first_sq is not None:
-            nf2, nr2 = first_sq[0] + df, first_sq[1] + dr
-            second_piece = None
-            while 0 <= nf2 < 8 and 0 <= nr2 < 8:
-                p = board_after.board[nf2][nr2]
-                if p != '':
-                    if Piece.color(p) == defender_color:
-                        second_piece = p
-                    break
-                nf2 += df
-                nr2 += dr
-            if second_piece and _piece_value(second_piece) > _piece_value(first_piece):
-                pinned_sq = idx_to_sq(first_sq[0], first_sq[1])
-                return 'pin', f"{first_piece.upper()}@{pinned_sq} 被牵制，保护后面更高价值的 {second_piece.upper()}"
+        if first_piece and second_piece:
+            first_val = _piece_value(first_piece)
+            second_val = _piece_value(second_piece)
+            is_absolute = Piece.type(second_piece) == 'K'
+            if is_absolute:
+                if first_val >= 1:
+                    pinned_sq = idx_to_sq(first_sq[0], first_sq[1])
+                    return 'pin', f"{first_piece.upper()}@{pinned_sq} 被 {mover.upper()} 绝对牵制，移动会暴露王"
+            else:
+                if second_val >= 5 and first_val >= 3 and second_val > first_val:
+                    pinned_sq = idx_to_sq(first_sq[0], first_sq[1])
+                    second_sq_str = idx_to_sq(second_sq[0], second_sq[1])
+                    best_pin = (
+                        'pin',
+                        f"{first_piece.upper()}@{pinned_sq} 被相对牵制，保护 {second_piece.upper()}@{second_sq_str}"
+                    )
+    if best_pin:
+        return best_pin
     return None, ''
 
 
 def detect_skewer(board_before, board_after, move_info):
-    """检测串击：走子后攻击一条线上的高价值棋子，它移开后会暴露后面较低价值的棋子"""
+    """检测串击：远射程棋子攻击，高价值棋子在前，移开后暴露低价值棋子"""
     attacker_color = Piece.color(move_info['piece'])
     defender_color = 'b' if attacker_color == 'w' else 'w'
     af = ord(move_info['to'][0]) - ord('a')
@@ -1234,6 +1259,7 @@ def detect_skewer(board_before, board_after, move_info):
         first_piece = None
         first_sq = None
         second_piece = None
+        second_sq = None
         while 0 <= nf < 8 and 0 <= nr < 8:
             p = board_after.board[nf][nr]
             if p != '':
@@ -1243,26 +1269,34 @@ def detect_skewer(board_before, board_after, move_info):
                         first_sq = (nf, nr)
                     else:
                         second_piece = p
+                        second_sq = (nf, nr)
                         break
                 else:
                     break
             nf += df
             nr += dr
-        if first_piece and second_piece and _piece_value(first_piece) >= _piece_value(second_piece) and _piece_value(first_piece) >= 3:
-            first_sq_str = idx_to_sq(first_sq[0], first_sq[1])
-            return 'skewer', f"{first_piece.upper()}@{first_sq_str} 被串击，移开后 {second_piece.upper()} 会被吃"
+        if first_piece and second_piece:
+            first_val = _piece_value(first_piece)
+            second_val = _piece_value(second_piece)
+            if first_val >= 5 and second_val >= 1 and first_val > second_val:
+                first_sq_str = idx_to_sq(first_sq[0], first_sq[1])
+                second_sq_str = idx_to_sq(second_sq[0], second_sq[1])
+                return 'skewer', f"{first_piece.upper()}@{first_sq_str} 被串击，移开后 {second_piece.upper()}@{second_sq_str} 会被吃"
     return None, ''
 
 
 def detect_mate_threat(board_before, board_after, move_info):
-    """检测将死威胁：走子后，下一步可以将死对方"""
+    """检测将死威胁：走子后，下一步存在可将死对方的走法"""
     if move_info.get('is_mate'):
         return None, ''
-    if move_info.get('is_check'):
-        return None, ''
     enemy_color = board_after.turn
-    legal_moves = board_after.get_all_legal_moves()
-    for move in legal_moves:
+    ally_color = 'b' if enemy_color == 'w' else 'w'
+    ally_legal_moves = []
+    for f, r, p in _find_pieces(board_after, ally_color):
+        moves = board_after.get_legal_moves(f, r)
+        for m in moves:
+            ally_legal_moves.append(m)
+    for move in ally_legal_moves:
         sf, sr, tf, tr = move
         test_board = board_after.copy()
         result = test_board.make_move(sf, sr, tf, tr)
@@ -1272,78 +1306,9 @@ def detect_mate_threat(board_before, board_after, move_info):
 
 
 def detect_deflection(board_before, board_after, move_info):
-    """检测诱离：通过吃子或攻击，迫使对方棋子离开原本防守的关键位置"""
+    """检测诱离：吃子迫使对方防守子离开原位，暴露它原本防守的重要目标"""
     if not move_info.get('is_capture'):
         return None, ''
-    captured = move_info.get('captured')
-    if not captured or captured == '':
-        return None, ''
-    captured_color = Piece.color(captured)
-    cf = ord(move_info['to'][0]) - ord('a')
-    cr = int(move_info['to'][1]) - 1
-    defender_color = captured_color
-    attacker_color = 'b' if defender_color == 'w' else 'w'
-    captured_defended_before = board_before.is_square_attacked(cf, cr, defender_color)
-    if not captured_defended_before:
-        return None, ''
-    now_attacked = board_after.is_square_attacked(cf, cr, attacker_color)
-    squares = _get_squares_attacked_by(board_after, attacker_color)
-    major_gain = False
-    for (sf, sr) in squares:
-        p = board_after.board[sf][sr]
-        if p and Piece.color(p) == defender_color and _piece_value(p) >= 5:
-            major_gain = True
-            break
-    if major_gain or True:
-        return 'deflection', f"吃 {captured.upper()}@{idx_to_sq(cf, cr)} 诱离防守子，暴露后续攻击点"
-    return None, ''
-
-
-def detect_overload(board_before, board_after, move_info):
-    """检测过载：对方一个棋子同时需要防守多个关键目标"""
-    attacker_color = Piece.color(move_info['piece'])
-    defender_color = 'b' if attacker_color == 'w' else 'w'
-    captured = move_info.get('captured')
-    if not captured or captured == '':
-        return None, ''
-    defender_pieces = _find_pieces(board_before, defender_color)
-    for df, dr, dp in defender_pieces:
-        ptype = Piece.type(dp)
-        if ptype in ('K', 'P'):
-            continue
-        attacked_squares = set()
-        if ptype == 'N':
-            knight_moves = [(1, 2), (2, 1), (-1, 2), (-2, 1), (1, -2), (2, -1), (-1, -2), (-2, -1)]
-            for mdf, mdr in knight_moves:
-                nf, nr = df + mdf, dr + mdr
-                if 0 <= nf < 8 and 0 <= nr < 8:
-                    tp = board_before.board[nf][nr]
-                    if tp and Piece.color(tp) == attacker_color:
-                        attacked_squares.add((nf, nr))
-        elif ptype in ('B', 'R', 'Q'):
-            dirs = []
-            if ptype in ('R', 'Q'):
-                dirs.extend([(0, -1), (0, 1), (-1, 0), (1, 0)])
-            if ptype in ('B', 'Q'):
-                dirs.extend([(-1, -1), (-1, 1), (1, -1), (1, 1)])
-            for mdf, mdr in dirs:
-                nf, nr = df + mdf, dr + mdr
-                while 0 <= nf < 8 and 0 <= nr < 8:
-                    tp = board_before.board[nf][nr]
-                    if tp != '':
-                        if Piece.color(tp) == attacker_color:
-                            attacked_squares.add((nf, nr))
-                        break
-                    nf += mdf
-                    nr += mdr
-        if len(attacked_squares) >= 2:
-            targets = [idx_to_sq(sf, sr) for sf, sr in attacked_squares]
-            return 'overload', f"{dp.upper()}@{idx_to_sq(df, dr)} 同时防守 {len(targets)} 个目标: {', '.join(targets)}"
-    return None, ''
-
-
-def detect_capture_defender(board_before, board_after, move_info):
-    """检测防守子被吃：吃掉正在防守关键位置或重要棋子的对方棋子"""
     captured = move_info.get('captured')
     if not captured or captured == '':
         return None, ''
@@ -1351,16 +1316,26 @@ def detect_capture_defender(board_before, board_after, move_info):
     attacker_color = 'b' if captured_color == 'w' else 'w'
     cf = ord(move_info['to'][0]) - ord('a')
     cr = int(move_info['to'][1]) - 1
-    defended_squares = set()
+    if _piece_value(captured) < 1:
+        return None, ''
+    defended_by_captured = []
     cp_type = Piece.type(captured)
-    if cp_type == 'N':
+    if cp_type == 'P':
+        direction = 1 if captured_color == 'w' else -1
+        for df in [-1, 1]:
+            nf, nr = cf + df, cr + direction
+            if 0 <= nf < 8 and 0 <= nr < 8:
+                tp = board_before.board[nf][nr]
+                if tp and Piece.color(tp) == captured_color:
+                    defended_by_captured.append((nf, nr, tp))
+    elif cp_type == 'N':
         knight_moves = [(1, 2), (2, 1), (-1, 2), (-2, 1), (1, -2), (2, -1), (-1, -2), (-2, -1)]
         for df, dr in knight_moves:
             nf, nr = cf + df, cr + dr
             if 0 <= nf < 8 and 0 <= nr < 8:
                 tp = board_before.board[nf][nr]
-                if tp and Piece.color(tp) == attacker_color:
-                    defended_squares.add((nf, nr))
+                if tp and Piece.color(tp) == captured_color:
+                    defended_by_captured.append((nf, nr, tp))
     elif cp_type in ('B', 'R', 'Q'):
         dirs = []
         if cp_type in ('R', 'Q'):
@@ -1372,37 +1347,155 @@ def detect_capture_defender(board_before, board_after, move_info):
             while 0 <= nf < 8 and 0 <= nr < 8:
                 tp = board_before.board[nf][nr]
                 if tp != '':
-                    if Piece.color(tp) == attacker_color:
-                        defended_squares.add((nf, nr))
+                    if Piece.color(tp) == captured_color:
+                        defended_by_captured.append((nf, nr, tp))
                     break
                 nf += df
                 nr += dr
-    if len(defended_squares) >= 1:
-        targets = [idx_to_sq(sf, sr) for sf, sr in defended_squares]
-        target_pieces = [board_before.board[sf][sr].upper() for sf, sr in defended_squares]
-        desc = ', '.join([f"{p}@{sq}" for p, sq in zip(target_pieces, targets)])
-        return 'capture_defender', f"吃掉防守子 {captured.upper()}@{idx_to_sq(cf, cr)}，该棋子原本防守: {desc}"
-    return None, ''
+    if not defended_by_captured:
+        return None, ''
+    important_targets = []
+    for df, dr, dp in defended_by_captured:
+        val = _piece_value(dp)
+        if val >= 5:
+            important_targets.append((df, dr, dp))
+    if len(important_targets) == 0:
+        return None, ''
+    targets_desc = ', '.join([f"{p.upper()}@{idx_to_sq(f, r)}" for f, r, p in important_targets[:3]])
+    return 'deflection', f"吃 {captured.upper()}@{idx_to_sq(cf, cr)} 诱离，暴露防守目标: {targets_desc}"
+
+
+def detect_overload(board_before, board_after, move_info):
+    """检测过载：对方一个棋子同时防守己方多个重要目标，无法兼顾"""
+    captured = move_info.get('captured')
+    is_capture = move_info.get('is_capture', False)
+    attacker_color = Piece.color(move_info['piece'])
+    defender_color = 'b' if attacker_color == 'w' else 'w'
+    all_overloaded = []
+    for df, dr, dp in _find_pieces(board_after, defender_color):
+        if Piece.type(dp) in ('K', 'P'):
+            continue
+        defended = []
+        dp_type = Piece.type(dp)
+        if dp_type == 'N':
+            knight_moves = [(1, 2), (2, 1), (-1, 2), (-2, 1), (1, -2), (2, -1), (-1, -2), (-2, -1)]
+            for mdf, mdr in knight_moves:
+                nf, nr = df + mdf, dr + mdr
+                if 0 <= nf < 8 and 0 <= nr < 8:
+                    tp = board_after.board[nf][nr]
+                    if tp and Piece.color(tp) == defender_color:
+                        defended.append((nf, nr, tp))
+        elif dp_type in ('B', 'R', 'Q'):
+            dirs = []
+            if dp_type in ('R', 'Q'):
+                dirs.extend([(0, -1), (0, 1), (-1, 0), (1, 0)])
+            if dp_type in ('B', 'Q'):
+                dirs.extend([(-1, -1), (-1, 1), (1, -1), (1, 1)])
+            for mdf, mdr in dirs:
+                nf, nr = df + mdf, dr + mdr
+                while 0 <= nf < 8 and 0 <= nr < 8:
+                    tp = board_after.board[nf][nr]
+                    if tp != '':
+                        if Piece.color(tp) == defender_color:
+                            defended.append((nf, nr, tp))
+                        break
+                    nf += mdf
+                    nr += mdr
+        high_val_defended = [(f, r, p) for f, r, p in defended if _piece_value(p) >= 3 and Piece.type(p) != 'K']
+        defender_val = _piece_value(dp)
+        total_target_val = sum(_piece_value(p) for _, _, p in high_val_defended)
+        if len(high_val_defended) >= 2 and total_target_val > defender_val * 2:
+            all_overloaded.append({
+                'pos': (df, dr),
+                'piece': dp,
+                'targets': high_val_defended,
+                'total_val': total_target_val,
+                'defender_val': defender_val,
+            })
+    if not all_overloaded:
+        return None, ''
+    best = max(all_overloaded, key=lambda x: x['total_val'])
+    targets_desc = ', '.join([f"{p.upper()}@{idx_to_sq(f, r)}" for f, r, p in best['targets'][:3]])
+    return 'overload', f"{best['piece'].upper()}@{idx_to_sq(*best['pos'])} 过载：同时防守 {len(best['targets'])} 个己方棋子 - {targets_desc}"
+
+
+def detect_capture_defender(board_before, board_after, move_info):
+    """检测防守子被吃：吃掉正在防守己方其他重要棋子的对方棋子"""
+    captured = move_info.get('captured')
+    if not captured or captured == '':
+        return None, ''
+    captured_color = Piece.color(captured)
+    attacker_color = 'b' if captured_color == 'w' else 'w'
+    cf = ord(move_info['to'][0]) - ord('a')
+    cr = int(move_info['to'][1]) - 1
+    if _piece_value(captured) < 3:
+        return None, ''
+    defended_by_captured = []
+    cp_type = Piece.type(captured)
+    if cp_type == 'N':
+        knight_moves = [(1, 2), (2, 1), (-1, 2), (-2, 1), (1, -2), (2, -1), (-1, -2), (-2, -1)]
+        for df, dr in knight_moves:
+            nf, nr = cf + df, cr + dr
+            if 0 <= nf < 8 and 0 <= nr < 8:
+                tp = board_before.board[nf][nr]
+                if tp and Piece.color(tp) == captured_color:
+                    defended_by_captured.append((nf, nr, tp))
+    elif cp_type in ('B', 'R', 'Q'):
+        dirs = []
+        if cp_type in ('R', 'Q'):
+            dirs.extend([(0, -1), (0, 1), (-1, 0), (1, 0)])
+        if cp_type in ('B', 'Q'):
+            dirs.extend([(-1, -1), (-1, 1), (1, -1), (1, 1)])
+        for df, dr in dirs:
+            nf, nr = cf + df, cr + dr
+            while 0 <= nf < 8 and 0 <= nr < 8:
+                tp = board_before.board[nf][nr]
+                if tp != '':
+                    if Piece.color(tp) == captured_color:
+                        defended_by_captured.append((nf, nr, tp))
+                    break
+                nf += df
+                nr += dr
+    if not defended_by_captured:
+        return None, ''
+    high_value = []
+    for f, r, p in defended_by_captured:
+        if _piece_value(p) >= 3:
+            high_value.append((f, r, p))
+    if len(high_value) == 0:
+        return None, ''
+    targets_desc = ', '.join([f"{p.upper()}@{idx_to_sq(f, r)}" for f, r, p in high_value[:3]])
+    return 'capture_defender', f"吃掉防守子 {captured.upper()}@{idx_to_sq(cf, cr)}，该棋子防守: {targets_desc}"
 
 
 def detect_promotion_threat(board_before, board_after, move_info):
-    """检测升变威胁：走子后，己方有兵可以在下一步升变"""
+    """检测升变威胁：走子后，己方兵到达倒数第二线，且能安全升变"""
     mover_color = Piece.color(move_info['piece'])
-    promotion_rank = 7 if mover_color == 'w' else 0
+    defender_color = 'b' if mover_color == 'w' else 'w'
     near_rank = 6 if mover_color == 'w' else 1
+    promotion_rank = 7 if mover_color == 'w' else 0
     pawns = _find_pieces(board_after, mover_color, 'P')
     for pf, pr, pp in pawns:
         if pr == near_rank:
             direction = 1 if mover_color == 'w' else -1
             nr = pr + direction
+            can_promote = False
+            reason = ''
             if 0 <= nr < 8 and board_after.board[pf][nr] == '':
-                return 'promotion_threat', f"兵 @{idx_to_sq(pf, pr)} 可下一步升变"
+                if not _is_square_defended(board_after, pf, nr, defender_color):
+                    can_promote = True
+                    reason = f"兵 @{idx_to_sq(pf, pr)} 可无人防守地升变"
             for df in [-1, 1]:
                 nf = pf + df
                 if 0 <= nf < 8 and 0 <= nr < 8:
                     target = board_after.board[nf][nr]
-                    if target and Piece.color(target) != mover_color:
-                        return 'promotion_threat', f"兵 @{idx_to_sq(pf, pr)} 可吃子升变"
+                    if target and Piece.color(target) == defender_color:
+                        target_val = _piece_value(target)
+                        if target_val >= 3:
+                            can_promote = True
+                            reason = f"兵 @{idx_to_sq(pf, pr)} 可吃 {target.upper()} 升变并获子力优势"
+            if can_promote:
+                return 'promotion_threat', reason
     return None, ''
 
 
