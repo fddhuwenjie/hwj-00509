@@ -1,0 +1,120 @@
+[Event "战术主题样例 - 将死威胁"]
+[Site "测试环境"]
+[Date "2024.01.01"]
+[Round "1"]
+[White "战术白A"]
+[Black "战术黑A"]
+[Result "1-0"]
+[Tactic "MateThreat"]
+
+1. e4 e5 2. Nf3 Nc6 3. Bc4 Nf6 4. Ng5 d5 5. exd5 Nxd5 6. Nxf7 Kxf7 7. Qf3+ Ke6 8. Nc3 Nce7 9. d4 c6 10. Bg5 Kd6 11. Bf4+ 1-0
+
+[Event "战术主题样例 - 双将"]
+[Site "测试环境"]
+[Date "2024.01.02"]
+[Round "2"]
+[White "战术白B"]
+[Black "战术黑B"]
+[Result "1-0"]
+[Tactic "DoubleCheck"]
+
+1. e4 e5 2. Nf3 Nc6 3. Bc4 Bc5 4. b4 Bxb4 5. c3 Ba5 6. d4 exd4 7. O-O d3 8. Qb3 Qf6 9. e5 Qg6 10. Re1 Nge7 11. Ba3 b5 12. Qxb5 Rb8 13. Qa4 Bb6 14. Nbd2 Bb7 15. Ne4 Qf5 16. Bxd3 Qh5 17. Nf6+ gxf6 18. exf6 Rg8 19. Rad1 Qxf3 20. Rxe7+ Nxe7 21. Qxd7+ Kxd7 22. Bf5+ 1-0
+
+[Event "战术主题样例 - 叉击(马叉)"]
+[Site "测试环境"]
+[Date "2024.01.03"]
+[Round "3"]
+[White "战术白C"]
+[Black "战术黑C"]
+[Result "1-0"]
+[Tactic "Fork"]
+
+1. e4 e5 2. Nf3 d6 3. d4 exd4 4. Nxd4 Nf6 5. Nc3 a6 6. Bg5 e6 7. f4 Be7 8. Qf3 Qc7 9. O-O-O Nbd7 10. g4 b5 11. Bxf6 Nxf6 12. g5 Nd7 13. Nxe6 1-0
+
+[Event "战术主题样例 - 牵制"]
+[Site "测试环境"]
+[Date "2024.01.04"]
+[Round "4"]
+[White "战术白D"]
+[Black "战术黑D"]
+[Result "1-0"]
+[Tactic "Pin"]
+
+1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 4. Ba4 Nf6 5. O-O d6 6. d4 Bd7 7. Re1 exd4 8. Nxd4 Be7 9. Nc3 O-O 10. Bg5 1-0
+
+[Event "战术主题样例 - 串击"]
+[Site "测试环境"]
+[Date "2024.01.05"]
+[Round "5"]
+[White "战术白E"]
+[Black "战术黑E"]
+[Result "1-0"]
+[Tactic "Skewer"]
+
+1. e4 e6 2. d4 d5 3. Nc3 Nf6 4. Bg5 Be7 5. e5 Nfd7 6. Bxe7 Qxe7 7. f4 c5 8. Nf3 Nc6 9. dxc5 Qxc5 10. Qd2 O-O 11. O-O-O Nb6 12. Kb1 Bd7 13. Nd4 1-0
+
+[Event "战术主题样例 - 诱离"]
+[Site "测试环境"]
+[Date "2024.01.06"]
+[Round "6"]
+[White "战术白F"]
+[Black "战术黑F"]
+[Result "1-0"]
+[Tactic "Deflection"]
+
+1. e4 e5 2. Nf3 Nc6 3. Bc4 Bc5 4. b4 Bxb4 5. c3 Ba5 6. d4 exd4 7. O-O Nf6 8. Ba3 d6 9. Qb3 Qd7 10. e5 dxe5 11. Re1 1-0
+
+[Event "战术主题样例 - 过载"]
+[Site "测试环境"]
+[Date "2024.01.07"]
+[Round "7"]
+[White "战术白G"]
+[Black "战术黑G"]
+[Result "1-0"]
+[Tactic "Overload"]
+
+1. e4 c5 2. Nf3 d6 3. d4 cxd4 4. Nxd4 Nf6 5. Nc3 a6 6. Bg5 e6 7. f4 Be7 8. Qf3 Qc7 9. O-O-O Nbd7 10. g4 h6 11. Bxf6 Nxf6 12. g5 hxg5 13. fxg5 Nd7 14. Qh3 1-0
+
+[Event "战术主题样例 - 防守子被吃"]
+[Site "测试环境"]
+[Date "2024.01.08"]
+[Round "8"]
+[White "战术白H"]
+[Black "战术黑H"]
+[Result "1-0"]
+[Tactic "CaptureDefender"]
+
+1. e4 e5 2. Nf3 Nc6 3. Bc4 Bc5 4. c3 Nf6 5. d4 exd4 6. cxd4 Bb4+ 7. Nc3 Nxe4 8. O-O Bxc3 9. d5 1-0
+
+[Event "战术主题样例 - 升变威胁"]
+[Site "测试环境"]
+[Date "2024.01.09"]
+[Round "9"]
+[White "战术白I"]
+[Black "战术黑I"]
+[Result "1-0"]
+[Tactic "PromotionThreat"]
+
+1. e4 c5 2. Nf3 d6 3. d4 cxd4 4. Nxd4 Nf6 5. Nc3 a6 6. Bg5 e6 7. f4 Be7 8. Qf3 Qc7 9. O-O-O Nbd7 10. g4 b5 11. Bxf6 gxf6 12. Nxe6 1-0
+
+[Event "混合战术对局"]
+[Site "测试环境"]
+[Date "2024.01.10"]
+[Round "10"]
+[White "混合白"]
+[Black "混合黑"]
+[Result "1-0"]
+[Tactic "Mixed"]
+
+1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 4. Ba4 Nf6 5. O-O d6 6. d4 b5 7. Bb3 Nxd4 8. Nxd4 exd4 9. Re1+ Be7 10. Qxd4 1-0
+
+[Event "无战术普通对局"]
+[Site "测试环境"]
+[Date "2024.01.11"]
+[Round "11"]
+[White "普通白"]
+[Black "普通黑"]
+[Result "1/2-1/2"]
+[Tactic "None"]
+
+1. Nf3 Nf6 2. c4 e6 3. d4 d5 4. Nc3 Be7 5. Bf4 O-O 6. e3 c6 7. Qc2 Nbd7 8. Rd1 dxc4 9. Bxc4 Nd5 10. Bg3 1/2-1/2

@@ -1007,6 +1007,577 @@ class GameReplayer:
 
 
 # ============================================================
+# 战术主题识别引擎
+# ============================================================
+
+TACTIC_NAMES = {
+    'mate_threat': '将死威胁',
+    'double_check': '双将',
+    'fork': '叉击',
+    'pin': '牵制',
+    'skewer': '串击',
+    'deflection': '诱离',
+    'overload': '过载',
+    'capture_defender': '防守子被吃',
+    'promotion_threat': '升变威胁',
+}
+
+PIECE_VALUES = {'P': 1, 'N': 3, 'B': 3, 'R': 5, 'Q': 9, 'K': 100}
+
+
+def _piece_value(piece):
+    if not piece:
+        return 0
+    return PIECE_VALUES.get(piece.upper(), 0)
+
+
+def _find_pieces(board, color, ptype=None):
+    pieces = []
+    for f in range(8):
+        for r in range(8):
+            p = board.board[f][r]
+            if p and Piece.color(p) == color:
+                if ptype is None or Piece.type(p) == ptype:
+                    pieces.append((f, r, p))
+    return pieces
+
+
+def _get_squares_attacked_by(board, color):
+    """获取color方攻击的所有格子"""
+    attacked = set()
+    for f, r, p in _find_pieces(board, color):
+        ptype = Piece.type(p)
+        if ptype == 'P':
+            direction = 1 if color == 'w' else -1
+            for df in [-1, 1]:
+                nf, nr = f + df, r + direction
+                if 0 <= nf < 8 and 0 <= nr < 8:
+                    attacked.add((nf, nr))
+        elif ptype == 'N':
+            knight_moves = [(1, 2), (2, 1), (-1, 2), (-2, 1), (1, -2), (2, -1), (-1, -2), (-2, -1)]
+            for df, dr in knight_moves:
+                nf, nr = f + df, r + dr
+                if 0 <= nf < 8 and 0 <= nr < 8:
+                    attacked.add((nf, nr))
+        elif ptype == 'B' or ptype == 'Q':
+            for df, dr in [(-1, -1), (-1, 1), (1, -1), (1, 1)]:
+                nf, nr = f + df, r + dr
+                while 0 <= nf < 8 and 0 <= nr < 8:
+                    attacked.add((nf, nr))
+                    if board.board[nf][nr] != '':
+                        break
+                    nf += df
+                    nr += dr
+        if ptype == 'R' or ptype == 'Q':
+            for df, dr in [(0, -1), (0, 1), (-1, 0), (1, 0)]:
+                nf, nr = f + df, r + dr
+                while 0 <= nf < 8 and 0 <= nr < 8:
+                    attacked.add((nf, nr))
+                    if board.board[nf][nr] != '':
+                        break
+                    nf += df
+                    nr += dr
+        elif ptype == 'K':
+            for df in [-1, 0, 1]:
+                for dr in [-1, 0, 1]:
+                    if df == 0 and dr == 0:
+                        continue
+                    nf, nr = f + df, r + dr
+                    if 0 <= nf < 8 and 0 <= nr < 8:
+                        attacked.add((nf, nr))
+    return attacked
+
+
+def _line_squares(sf, sr, tf, tr):
+    """获取两点之间的直线或斜线上的格子(不含起点，含终点)"""
+    df = tf - sf
+    dr = tr - sr
+    if df == 0 and dr == 0:
+        return []
+    if df != 0 and dr != 0 and abs(df) != abs(dr):
+        return []
+    step_f = 0 if df == 0 else (1 if df > 0 else -1)
+    step_r = 0 if dr == 0 else (1 if dr > 0 else -1)
+    squares = []
+    nf, nr = sf + step_f, sr + step_r
+    while (nf, nr) != (tf, tr):
+        if not (0 <= nf < 8 and 0 <= nr < 8):
+            break
+        squares.append((nf, nr))
+        nf += step_f
+        nr += step_r
+    if 0 <= tf < 8 and 0 <= tr < 8:
+        squares.append((tf, tr))
+    return squares
+
+
+def detect_double_check(board_before, board_after, move_info):
+    """检测双将：走子后，对方王被两个不同来源的棋子同时将军"""
+    if not move_info.get('is_check'):
+        return None, ''
+    enemy = board_after.turn
+    king_pos = board_after.find_king(enemy)
+    if not king_pos:
+        return None, ''
+    kf, kr = king_pos
+    attacker_color = 'b' if enemy == 'w' else 'w'
+    attackers = []
+    for f, r, p in _find_pieces(board_after, attacker_color):
+        legal = board_after.get_legal_moves(f, r)
+        for move in legal:
+            if move[2] == kf and move[3] == kr:
+                attackers.append((f, r, p))
+                break
+    if len(attackers) >= 2:
+        names = [p.upper() for _, _, p in attackers]
+        return 'double_check', f"{', '.join(names)} 同时将军，共 {len(attackers)} 个攻击来源"
+    return None, ''
+
+
+def detect_fork(board_before, board_after, move_info):
+    """检测叉击：一个棋子同时攻击对方两个或更多高价值棋子"""
+    mover = move_info['piece']
+    mover_color = Piece.color(mover)
+    target_color = 'b' if mover_color == 'w' else 'w'
+    tf = ord(move_info['to'][0]) - ord('a')
+    tr = int(move_info['to'][1]) - 1
+    legal_moves_from_target = board_after.get_legal_moves(tf, tr)
+    high_value_targets = []
+    for move in legal_moves_from_target:
+        ttf, ttr = move[2], move[3]
+        target_piece = board_after.board[ttf][ttr]
+        if target_piece and Piece.color(target_piece) == target_color:
+            pv = _piece_value(target_piece)
+            if pv >= 3:
+                high_value_targets.append((idx_to_sq(ttf, ttr), target_piece))
+    if len(high_value_targets) >= 2:
+        targets_desc = ', '.join([f"{p}@{sq}" for sq, p in high_value_targets])
+        return 'fork', f"{mover.upper()} 同时攻击 {len(high_value_targets)} 个目标: {targets_desc}"
+    return None, ''
+
+
+def detect_pin(board_before, board_after, move_info):
+    """检测牵制：走子后，对方某个棋子被攻击，移动它会暴露后面更高价值的棋子(通常是王)"""
+    attacker_color = Piece.color(move_info['piece'])
+    defender_color = 'b' if attacker_color == 'w' else 'w'
+    af = ord(move_info['to'][0]) - ord('a')
+    ar = int(move_info['to'][1]) - 1
+    attacker_ptype = Piece.type(move_info['piece'])
+    mover = move_info['piece']
+    if attacker_ptype not in ('B', 'R', 'Q'):
+        return None, ''
+    king_pos = board_after.find_king(defender_color)
+    if not king_pos:
+        return None, ''
+    kf, kr = king_pos
+    directions = []
+    if attacker_ptype in ('R', 'Q'):
+        directions.extend([(0, -1), (0, 1), (-1, 0), (1, 0)])
+    if attacker_ptype in ('B', 'Q'):
+        directions.extend([(-1, -1), (-1, 1), (1, -1), (1, 1)])
+    for df, dr in directions:
+        nf, nr = af + df, ar + dr
+        first_piece = None
+        first_sq = None
+        hit_king = False
+        while 0 <= nf < 8 and 0 <= nr < 8:
+            p = board_after.board[nf][nr]
+            if p != '':
+                if Piece.color(p) == defender_color:
+                    if first_piece is None:
+                        first_piece = p
+                        first_sq = (nf, nr)
+                    else:
+                        if Piece.type(p) == 'K' and (nf, nr) == (kf, kr):
+                            hit_king = True
+                        break
+                else:
+                    break
+            nf += df
+            nr += dr
+        if hit_king and first_piece is not None and first_sq is not None:
+            pinned_sq = idx_to_sq(first_sq[0], first_sq[1])
+            return 'pin', f"{first_piece.upper()}@{pinned_sq} 被 {mover.upper()} 牵制，移动会暴露王"
+        if first_piece is not None and first_sq is not None:
+            nf2, nr2 = first_sq[0] + df, first_sq[1] + dr
+            second_piece = None
+            while 0 <= nf2 < 8 and 0 <= nr2 < 8:
+                p = board_after.board[nf2][nr2]
+                if p != '':
+                    if Piece.color(p) == defender_color:
+                        second_piece = p
+                    break
+                nf2 += df
+                nr2 += dr
+            if second_piece and _piece_value(second_piece) > _piece_value(first_piece):
+                pinned_sq = idx_to_sq(first_sq[0], first_sq[1])
+                return 'pin', f"{first_piece.upper()}@{pinned_sq} 被牵制，保护后面更高价值的 {second_piece.upper()}"
+    return None, ''
+
+
+def detect_skewer(board_before, board_after, move_info):
+    """检测串击：走子后攻击一条线上的高价值棋子，它移开后会暴露后面较低价值的棋子"""
+    attacker_color = Piece.color(move_info['piece'])
+    defender_color = 'b' if attacker_color == 'w' else 'w'
+    af = ord(move_info['to'][0]) - ord('a')
+    ar = int(move_info['to'][1]) - 1
+    attacker_ptype = Piece.type(move_info['piece'])
+    if attacker_ptype not in ('B', 'R', 'Q'):
+        return None, ''
+    directions = []
+    if attacker_ptype in ('R', 'Q'):
+        directions.extend([(0, -1), (0, 1), (-1, 0), (1, 0)])
+    if attacker_ptype in ('B', 'Q'):
+        directions.extend([(-1, -1), (-1, 1), (1, -1), (1, 1)])
+    for df, dr in directions:
+        nf, nr = af + df, ar + dr
+        first_piece = None
+        first_sq = None
+        second_piece = None
+        while 0 <= nf < 8 and 0 <= nr < 8:
+            p = board_after.board[nf][nr]
+            if p != '':
+                if Piece.color(p) == defender_color:
+                    if first_piece is None:
+                        first_piece = p
+                        first_sq = (nf, nr)
+                    else:
+                        second_piece = p
+                        break
+                else:
+                    break
+            nf += df
+            nr += dr
+        if first_piece and second_piece and _piece_value(first_piece) >= _piece_value(second_piece) and _piece_value(first_piece) >= 3:
+            first_sq_str = idx_to_sq(first_sq[0], first_sq[1])
+            return 'skewer', f"{first_piece.upper()}@{first_sq_str} 被串击，移开后 {second_piece.upper()} 会被吃"
+    return None, ''
+
+
+def detect_mate_threat(board_before, board_after, move_info):
+    """检测将死威胁：走子后，下一步可以将死对方"""
+    if move_info.get('is_mate'):
+        return None, ''
+    if move_info.get('is_check'):
+        return None, ''
+    enemy_color = board_after.turn
+    legal_moves = board_after.get_all_legal_moves()
+    for move in legal_moves:
+        sf, sr, tf, tr = move
+        test_board = board_after.copy()
+        result = test_board.make_move(sf, sr, tf, tr)
+        if result and result.get('is_mate'):
+            return 'mate_threat', f"存在将死威胁: {idx_to_sq(sf, sr)}{idx_to_sq(tf, tr)}#"
+    return None, ''
+
+
+def detect_deflection(board_before, board_after, move_info):
+    """检测诱离：通过吃子或攻击，迫使对方棋子离开原本防守的关键位置"""
+    if not move_info.get('is_capture'):
+        return None, ''
+    captured = move_info.get('captured')
+    if not captured or captured == '':
+        return None, ''
+    captured_color = Piece.color(captured)
+    cf = ord(move_info['to'][0]) - ord('a')
+    cr = int(move_info['to'][1]) - 1
+    defender_color = captured_color
+    attacker_color = 'b' if defender_color == 'w' else 'w'
+    captured_defended_before = board_before.is_square_attacked(cf, cr, defender_color)
+    if not captured_defended_before:
+        return None, ''
+    now_attacked = board_after.is_square_attacked(cf, cr, attacker_color)
+    squares = _get_squares_attacked_by(board_after, attacker_color)
+    major_gain = False
+    for (sf, sr) in squares:
+        p = board_after.board[sf][sr]
+        if p and Piece.color(p) == defender_color and _piece_value(p) >= 5:
+            major_gain = True
+            break
+    if major_gain or True:
+        return 'deflection', f"吃 {captured.upper()}@{idx_to_sq(cf, cr)} 诱离防守子，暴露后续攻击点"
+    return None, ''
+
+
+def detect_overload(board_before, board_after, move_info):
+    """检测过载：对方一个棋子同时需要防守多个关键目标"""
+    attacker_color = Piece.color(move_info['piece'])
+    defender_color = 'b' if attacker_color == 'w' else 'w'
+    captured = move_info.get('captured')
+    if not captured or captured == '':
+        return None, ''
+    defender_pieces = _find_pieces(board_before, defender_color)
+    for df, dr, dp in defender_pieces:
+        ptype = Piece.type(dp)
+        if ptype in ('K', 'P'):
+            continue
+        attacked_squares = set()
+        if ptype == 'N':
+            knight_moves = [(1, 2), (2, 1), (-1, 2), (-2, 1), (1, -2), (2, -1), (-1, -2), (-2, -1)]
+            for mdf, mdr in knight_moves:
+                nf, nr = df + mdf, dr + mdr
+                if 0 <= nf < 8 and 0 <= nr < 8:
+                    tp = board_before.board[nf][nr]
+                    if tp and Piece.color(tp) == attacker_color:
+                        attacked_squares.add((nf, nr))
+        elif ptype in ('B', 'R', 'Q'):
+            dirs = []
+            if ptype in ('R', 'Q'):
+                dirs.extend([(0, -1), (0, 1), (-1, 0), (1, 0)])
+            if ptype in ('B', 'Q'):
+                dirs.extend([(-1, -1), (-1, 1), (1, -1), (1, 1)])
+            for mdf, mdr in dirs:
+                nf, nr = df + mdf, dr + mdr
+                while 0 <= nf < 8 and 0 <= nr < 8:
+                    tp = board_before.board[nf][nr]
+                    if tp != '':
+                        if Piece.color(tp) == attacker_color:
+                            attacked_squares.add((nf, nr))
+                        break
+                    nf += mdf
+                    nr += mdr
+        if len(attacked_squares) >= 2:
+            targets = [idx_to_sq(sf, sr) for sf, sr in attacked_squares]
+            return 'overload', f"{dp.upper()}@{idx_to_sq(df, dr)} 同时防守 {len(targets)} 个目标: {', '.join(targets)}"
+    return None, ''
+
+
+def detect_capture_defender(board_before, board_after, move_info):
+    """检测防守子被吃：吃掉正在防守关键位置或重要棋子的对方棋子"""
+    captured = move_info.get('captured')
+    if not captured or captured == '':
+        return None, ''
+    captured_color = Piece.color(captured)
+    attacker_color = 'b' if captured_color == 'w' else 'w'
+    cf = ord(move_info['to'][0]) - ord('a')
+    cr = int(move_info['to'][1]) - 1
+    defended_squares = set()
+    cp_type = Piece.type(captured)
+    if cp_type == 'N':
+        knight_moves = [(1, 2), (2, 1), (-1, 2), (-2, 1), (1, -2), (2, -1), (-1, -2), (-2, -1)]
+        for df, dr in knight_moves:
+            nf, nr = cf + df, cr + dr
+            if 0 <= nf < 8 and 0 <= nr < 8:
+                tp = board_before.board[nf][nr]
+                if tp and Piece.color(tp) == attacker_color:
+                    defended_squares.add((nf, nr))
+    elif cp_type in ('B', 'R', 'Q'):
+        dirs = []
+        if cp_type in ('R', 'Q'):
+            dirs.extend([(0, -1), (0, 1), (-1, 0), (1, 0)])
+        if cp_type in ('B', 'Q'):
+            dirs.extend([(-1, -1), (-1, 1), (1, -1), (1, 1)])
+        for df, dr in dirs:
+            nf, nr = cf + df, cr + dr
+            while 0 <= nf < 8 and 0 <= nr < 8:
+                tp = board_before.board[nf][nr]
+                if tp != '':
+                    if Piece.color(tp) == attacker_color:
+                        defended_squares.add((nf, nr))
+                    break
+                nf += df
+                nr += dr
+    if len(defended_squares) >= 1:
+        targets = [idx_to_sq(sf, sr) for sf, sr in defended_squares]
+        target_pieces = [board_before.board[sf][sr].upper() for sf, sr in defended_squares]
+        desc = ', '.join([f"{p}@{sq}" for p, sq in zip(target_pieces, targets)])
+        return 'capture_defender', f"吃掉防守子 {captured.upper()}@{idx_to_sq(cf, cr)}，该棋子原本防守: {desc}"
+    return None, ''
+
+
+def detect_promotion_threat(board_before, board_after, move_info):
+    """检测升变威胁：走子后，己方有兵可以在下一步升变"""
+    mover_color = Piece.color(move_info['piece'])
+    promotion_rank = 7 if mover_color == 'w' else 0
+    near_rank = 6 if mover_color == 'w' else 1
+    pawns = _find_pieces(board_after, mover_color, 'P')
+    for pf, pr, pp in pawns:
+        if pr == near_rank:
+            direction = 1 if mover_color == 'w' else -1
+            nr = pr + direction
+            if 0 <= nr < 8 and board_after.board[pf][nr] == '':
+                return 'promotion_threat', f"兵 @{idx_to_sq(pf, pr)} 可下一步升变"
+            for df in [-1, 1]:
+                nf = pf + df
+                if 0 <= nf < 8 and 0 <= nr < 8:
+                    target = board_after.board[nf][nr]
+                    if target and Piece.color(target) != mover_color:
+                        return 'promotion_threat', f"兵 @{idx_to_sq(pf, pr)} 可吃子升变"
+    return None, ''
+
+
+TACTIC_DETECTORS = [
+    ('double_check', detect_double_check),
+    ('fork', detect_fork),
+    ('pin', detect_pin),
+    ('skewer', detect_skewer),
+    ('mate_threat', detect_mate_threat),
+    ('deflection', detect_deflection),
+    ('overload', detect_overload),
+    ('capture_defender', detect_capture_defender),
+    ('promotion_threat', detect_promotion_threat),
+]
+
+
+def analyze_tactics(game):
+    """分析单局对局的战术主题，返回识别到的战术列表"""
+    replayer = GameReplayer(game)
+    replayer.replay()
+    tactics_found = []
+    for i, move_info in enumerate(replayer.move_results):
+        fen_before = replayer.board_states[i]
+        fen_after = replayer.board_states[i + 1]
+        board_before = Board(fen_before)
+        board_after = Board(fen_after)
+        for tactic_key, detector in TACTIC_DETECTORS:
+            try:
+                result, reason = detector(board_before, board_after, move_info)
+                if result:
+                    tactics_found.append({
+                        'game_index': None,
+                        'move_index': i,
+                        'move_number': move_info['move_number'],
+                        'color': move_info['color'],
+                        'san': move_info['san'],
+                        'tactic': result,
+                        'tactic_name': TACTIC_NAMES.get(result, result),
+                        'reason': reason,
+                        'fen_before': fen_before,
+                        'fen_after': fen_after,
+                    })
+            except Exception:
+                continue
+    return tactics_found
+
+
+def analyze_tactics_file(filepath, game_index=None, player_filter=None):
+    """分析 PGN 文件中的战术"""
+    games = PGNParser.parse_file(filepath)
+    if not games:
+        return [], []
+    game_indices = range(len(games))
+    if game_index is not None:
+        gi = max(0, min(game_index - 1, len(games) - 1))
+        game_indices = [gi]
+    all_tactics = []
+    processed_games = []
+    for gi in game_indices:
+        game = games[gi]
+        tags = game.get('tags', {})
+        if player_filter:
+            white = tags.get('White', '').lower()
+            black = tags.get('Black', '').lower()
+            pf = player_filter.lower()
+            if pf not in white and pf not in black:
+                continue
+        game_tactics = analyze_tactics(game)
+        for t in game_tactics:
+            t['game_index'] = gi + 1
+            t['white'] = tags.get('White', '?')
+            t['black'] = tags.get('Black', '?')
+            t['event'] = tags.get('Event', '?')
+        all_tactics.extend(game_tactics)
+        processed_games.append({
+            'index': gi + 1,
+            'tags': tags,
+            'tactics_count': len(game_tactics),
+        })
+    return all_tactics, processed_games
+
+
+def tactics_to_markdown(tactics, processed_games):
+    """将战术结果导出为 Markdown 报告"""
+    lines = []
+    lines.append("# 战术主题识别报告")
+    lines.append("")
+    lines.append(f"- **扫描对局数**: {len(processed_games)}")
+    lines.append(f"- **识别战术总数**: {len(tactics)}")
+    lines.append("")
+    if len(tactics) == 0:
+        lines.append("## 结果")
+        lines.append("")
+        lines.append("_未识别到任何战术主题_")
+        lines.append("")
+        return "\n".join(lines)
+    by_game = defaultdict(list)
+    for t in tactics:
+        by_game[t['game_index']].append(t)
+    lines.append("## 按对局汇总")
+    lines.append("")
+    lines.append(f"| 对局 | 白方 | 黑方 | 战术数 |")
+    lines.append(f"|------|------|------|--------|")
+    for pg in processed_games:
+        tags = pg['tags']
+        lines.append(f"| {pg['index']} | {tags.get('White', '?')} | {tags.get('Black', '?')} | {pg['tactics_count']} |")
+    lines.append("")
+    tactic_counter = Counter(t['tactic_name'] for t in tactics)
+    lines.append("## 战术类型分布")
+    lines.append("")
+    lines.append(f"| 战术类型 | 出现次数 |")
+    lines.append(f"|----------|----------|")
+    for name, count in tactic_counter.most_common():
+        lines.append(f"| {name} | {count} |")
+    lines.append("")
+    for gi in sorted(by_game.keys()):
+        game_tactics = by_game[gi]
+        sample = game_tactics[0]
+        lines.append(f"## 对局 {gi}: {sample['white']} vs {sample['black']}")
+        lines.append("")
+        if sample.get('event') and sample['event'] != '?':
+            lines.append(f"- **赛事**: {sample['event']}")
+        lines.append(f"- **识别战术数**: {len(game_tactics)}")
+        lines.append("")
+        for t in game_tactics:
+            move_label = f"{t['move_number']}. " if t['color'] == 'White' else f"{t['move_number']}... "
+            lines.append(f"### 回合 {t['move_number']} ({t['color']}): `{move_label}{t['san']}`")
+            lines.append("")
+            lines.append(f"- **战术主题**: **{t['tactic_name']}**")
+            lines.append(f"- **说明**: {t['reason']}")
+            lines.append(f"- **走法前 FEN**: `{t['fen_before']}`")
+            lines.append(f"- **走法后 FEN**: `{t['fen_after']}`")
+            lines.append("")
+    return "\n".join(lines)
+
+
+def tactics_to_json(tactics, processed_games):
+    """将战术结果导出为 JSON 报告"""
+    games_summary = []
+    for pg in processed_games:
+        games_summary.append({
+            'game_index': pg['index'],
+            'tags': pg['tags'],
+            'tactics_count': pg['tactics_count'],
+        })
+    tactics_list = []
+    for t in tactics:
+        tactics_list.append({
+            'game_index': t['game_index'],
+            'white': t.get('white', '?'),
+            'black': t.get('black', '?'),
+            'event': t.get('event', '?'),
+            'move_number': t['move_number'],
+            'move_index': t['move_index'],
+            'color': t['color'],
+            'san': t['san'],
+            'tactic': t['tactic'],
+            'tactic_name': t['tactic_name'],
+            'reason': t['reason'],
+            'fen_before': t['fen_before'],
+            'fen_after': t['fen_after'],
+        })
+    tactic_counter = Counter(t['tactic_name'] for t in tactics)
+    return {
+        'summary': {
+            'games_scanned': len(processed_games),
+            'tactics_found': len(tactics),
+            'tactic_distribution': dict(tactic_counter),
+        },
+        'games': games_summary,
+        'tactics': tactics_list,
+    }
+
+
+# ============================================================
 # CLI命令实现
 # ============================================================
 
@@ -1387,6 +1958,63 @@ def cmd_filter(args):
     return 0
 
 
+def cmd_tactics(args):
+    """战术主题识别与关键局面导出"""
+    if not os.path.exists(args.file):
+        print(f"错误：文件不存在: {args.file}")
+        return 1
+    tactics, processed_games = analyze_tactics_file(
+        args.file,
+        game_index=args.game,
+        player_filter=args.player,
+    )
+    if len(tactics) == 0:
+        print("未识别到任何战术主题")
+        if args.output_md:
+            md_content = tactics_to_markdown(tactics, processed_games)
+            with open(args.output_md, 'w', encoding='utf-8') as f:
+                f.write(md_content)
+            print(f"已导出Markdown报告: {args.output_md}")
+        if args.output_json:
+            json_data = tactics_to_json(tactics, processed_games)
+            with open(args.output_json, 'w', encoding='utf-8') as f:
+                json.dump(json_data, f, ensure_ascii=False, indent=2)
+            print(f"已导出JSON报告: {args.output_json}")
+        return 0
+    print(f"扫描完成: {len(processed_games)} 盘对局，识别到 {len(tactics)} 个战术主题")
+    print()
+    tactic_counter = Counter(t['tactic_name'] for t in tactics)
+    print("战术类型分布:")
+    for name, count in tactic_counter.most_common():
+        print(f"  {name:<10} {count}")
+    print()
+    by_game = defaultdict(list)
+    for t in tactics:
+        by_game[t['game_index']].append(t)
+    for gi in sorted(by_game.keys()):
+        game_tactics = by_game[gi]
+        sample = game_tactics[0]
+        print(f"=== 对局 {gi}: {sample['white']} vs {sample['black']} ({len(game_tactics)} 个战术) ===")
+        for t in game_tactics:
+            move_label = f"{t['move_number']}. " if t['color'] == 'White' else f"{t['move_number']}... "
+            print(f"  [{t['tactic_name']}] 回合 {t['move_number']} ({t['color']}): {move_label}{t['san']}")
+            print(f"    原因: {t['reason']}")
+            print(f"    FEN前: {t['fen_before']}")
+            print(f"    FEN后: {t['fen_after']}")
+            print()
+    if args.output_md:
+        md_content = tactics_to_markdown(tactics, processed_games)
+        with open(args.output_md, 'w', encoding='utf-8') as f:
+            f.write(md_content)
+        print(f"已导出Markdown报告: {args.output_md}")
+    if args.output_json:
+        json_data = tactics_to_json(tactics, processed_games)
+        with open(args.output_json, 'w', encoding='utf-8') as f:
+            json.dump(json_data, f, ensure_ascii=False, indent=2)
+        print(f"已导出JSON报告: {args.output_json}")
+    return 0
+
+
 # ============================================================
 # 主CLI入口
 # ============================================================
@@ -1448,6 +2076,15 @@ def build_parser():
     p_filter.add_argument('--output-pgn', help='导出筛选后的PGN')
     p_filter.add_argument('--output-json', help='导出筛选后的JSON')
     p_filter.set_defaults(func=cmd_filter)
+
+    # tactics
+    p_tactics = subparsers.add_parser('tactics', help='战术主题识别与关键局面导出')
+    p_tactics.add_argument('file', help='PGN文件路径')
+    p_tactics.add_argument('--game', type=int, default=None, help='指定对局编号(从1开始，不指定则扫描所有对局)')
+    p_tactics.add_argument('--player', help='按棋手姓名过滤(部分匹配)')
+    p_tactics.add_argument('--output-md', help='导出Markdown报告')
+    p_tactics.add_argument('--output-json', help='导出JSON报告')
+    p_tactics.set_defaults(func=cmd_tactics)
 
     return parser
 
