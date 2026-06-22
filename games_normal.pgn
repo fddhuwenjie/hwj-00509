@@ -1,0 +1,47 @@
+[Event "世界国际象棋锦标赛"]
+[Site "上海"]
+[Date "2024.05.15"]
+[Round "1"]
+[White "张三"]
+[Black "李四"]
+[Result "1-0"]
+[WhiteElo "2450"]
+[BlackElo "2400"]
+[TimeControl "90+30"]
+
+1. e4 e5 2. Nf3 Nc6 3. Bc4 Bc5 4. c3 Nf6 5. d4 exd4 6. cxd4 Bb4+ 7. Nc3 Nxe4 8.
+O-O Bxc3 9. d5 Bf6 10. Re1 Ne7 11. Rxe4 d6 12. Bg5 Bxg5 13. Nxg5 h6 14. Qf3 hxg5
+15. Qxf7+ Kd7 16. Qxg7 Qf8 17. Qxf8 Rxf8 18. Re1 Nf5 19. g4 Nh6 20. Bf7 Rxf7 21.
+Re7+ Kxe7 22. Rxf1 Nf5 23. gxf5 Kf6 24. h4 gxh4 25. Kg2 h3+ 26. Kxh3 Kxf5 27. Kh4
+g5+ 28. Kh5 Kf6 29. Rf1+ Kg7 30. Rf5 b6 31. Kg4 Kh6 32. Rh5# 1-0
+
+[Event "国际象棋邀请赛"]
+[Site "北京"]
+[Date "2024.06.20"]
+[Round "3"]
+[White "王五"]
+[Black "赵六"]
+[Result "1/2-1/2"]
+[WhiteElo "2380"]
+[BlackElo "2410"]
+
+1. d4 d5 2. c4 e6 3. Nc3 Nf6 4. Bg5 Be7 5. e3 O-O 6. Nf3 Nbd7 7. Rc1 c6 8. Bd3
+dxc4 9. Bxc4 Nd5 10. Bxe7 Qxe7 11. O-O Nxc3 12. Rxc3 e5 13. dxe5 Nxe5 14. Nxe5
+Qxe5 15. Qd4 Qxd4 16. exd4 Rd8 17. Rfc1 Bd7 18. Bb3 Bf5 19. R3c2 Rac8 20. Kf1
+Kf8 21. Ke1 Ke7 22. Rd2 Rxd2 23. Kxd2 Rd8 24. Rd1 Rxd1+ 25. Kxd1 Kd6 26. Bc2 b6
+27. f3 Kc5 28. b4+ Kb5 29. Bxf5 gxf5 30. a4+ Kc7 31. Ke3 Kd6 1/2-1/2
+
+[Event "全国国际象棋公开赛"]
+[Site "深圳"]
+[Date "2024.08.10"]
+[Round "5"]
+[White "陈七"]
+[Black "刘八"]
+[Result "0-1"]
+[WhiteElo "2290"]
+[BlackElo "2350"]
+
+1. c4 e5 2. Nc3 Nf6 3. Nf3 Nc6 4. e4 Bc5 5. d3 d6 6. Be2 O-O 7. O-O a6 8. a3 Ba7
+9. Nh4 g6 10. Bg5 h6 11. Be3 Bxe3 12. fxe3 Ne5 13. a4 c6 14. Qc2 Qe7 15. Kh1 Be6
+16. b4 Nh5 17. Nf3 Nxf3 18. Bxf3 Rfe8 19. Rfd1 Rad8 20. Rab1 Kh7 21. Qa2 Qc7 22.
+b5 axb5 23. axb5 Bxc4 24. dxc4 Nxc4 25. Qxc4 Qxh2# 0-1

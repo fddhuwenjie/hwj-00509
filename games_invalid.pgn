@@ -1,0 +1,48 @@
+[Event "测试对局 - 包含非法走法"]
+[Site "测试环境"]
+[Date "2024.01.01"]
+[Round "1"]
+[White "测试白方"]
+[Black "测试黑方"]
+[Result "*"]
+[Test "InvalidMoves"]
+
+1. e4 e5
+2. Nf3 Nc6
+3. Bb5 a6
+4. Ba4 Nf6
+5. O-O d7 {非法：兵不能前进1格后仍在原位附近 - 实际是合法的}
+6. Re1 b5
+7. Bb3 Be7
+8. c3 O-O
+9. h3 Nb8
+10. d4 Nbd7
+11. Ng5 {马走到g5} Qxg5 {非法：黑方后不能直接吃马，没有通路}
+12. c4 c6
+13. Nc3 Bb7
+14. Bg5 b4
+15. Na4 h6
+16. Bf4 exd4
+17. e5 Ne4
+18. Qf3 {合法} Nxf2 {非法：马吃f2，但马应从e4出发，吃f2是合法的斜走}
+19. Kxf2 Qh4+
+20. g3 Qxh3 {非法：后不能穿过自己的棋子}
+21. Rh1 Qxh1
+22. Ke2 {白王走到e2} Nxe5 {黑方吃e5兵}
+23. Qe4 Nc4 {合法}
+24. Kd3 {王走到d3，易被攻击}
+25. a9 {非法：a9是无效的棋格}
+1-0
+
+[Event "合法的对照对局"]
+[Site "测试环境"]
+[Date "2024.01.02"]
+[Round "2"]
+[White "对照白方"]
+[Black "对照黑方"]
+[Result "1-0"]
+
+1. e4 e5 2. Nf3 Nc6 3. Bc4 Bc5 4. b4 Bxb4 5. c3 Ba5 6. d4 exd4 7. O-O d3 8. Qb3
+Qf6 9. e5 Qg6 10. Re1 Nge7 11. Ba3 b5 12. Qxb5 Rb8 13. Qa4 Bb6 14. Nbd2 Bb7 15.
+Ne4 Qf5 16. Bxd3 Qh5 17. Nf6+ gxf6 18. exf6 Rg8 19. Rad1 Qxf3 20. Rxe7+ Nxe7 21.
+Qxd7+ Kxd7 22. Bf5+ Ke8 23. Bd7+ Kf8 24. Bxe7# 1-0
